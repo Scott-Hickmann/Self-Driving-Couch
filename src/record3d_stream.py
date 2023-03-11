@@ -3,7 +3,12 @@ from record3d import Record3DStream
 import cv2
 from threading import Event
 from tracking import track_shirt
+import matplotlib.pyplot as plt
 
+def moving_average(a, n=10) :
+    ret = np.cumsum(a, dtype=float)
+    ret[n:] = ret[n:] - ret[:-n]
+    return ret[n - 1:] / n
 
 class DemoApp:
     def __init__(self):
@@ -44,41 +49,78 @@ class DemoApp:
                          [        0,         0,         1]])
 
     def start_processing_stream(self):
-        while True:
-            self.event.wait()  # Wait for new frame to arrive
+        x_path = []
+        y_path = []
+        z_path = []
 
-            # Copy the newly arrived RGBD frame
-            depth = self.session.get_depth_frame()
-            rgb = self.session.get_rgb_frame()
-            intrinsic_mat = self.get_intrinsic_mat_from_coeffs(self.session.get_intrinsic_mat())
-            camera_pose = self.session.get_camera_pose()  # Quaternion + world position (accessible via camera_pose.[qx|qy|qz|qw|tx|ty|tz])
+        plt.ion()
+        try:
+            while True:
+                self.event.wait()  # Wait for new frame to arrive
 
-            # print(intrinsic_mat)
+                # Copy the newly arrived RGBD frame
+                depth = self.session.get_depth_frame()
+                rgb = self.session.get_rgb_frame()
+                intrinsic_mat = self.get_intrinsic_mat_from_coeffs(self.session.get_intrinsic_mat())
+                camera_pose = self.session.get_camera_pose()  # Quaternion + world position (accessible via camera_pose.[qx|qy|qz|qw|tx|ty|tz])
 
-            # You can now e.g. create point cloud by projecting the depth map using the intrinsic matrix.
+                # print(intrinsic_mat)
 
-            # Postprocess it
-            if self.session.get_device_type() == self.DEVICE_TYPE__TRUEDEPTH:
-                depth = cv2.flip(depth, 1)
-                rgb = cv2.flip(rgb, 1)
+                # You can now e.g. create point cloud by projecting the depth map using the intrinsic matrix.
 
-            rgb = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+                # Postprocess it
+                if self.session.get_device_type() == self.DEVICE_TYPE__TRUEDEPTH:
+                    depth = cv2.flip(depth, 1)
+                    rgb = cv2.flip(rgb, 1)
 
-            rgb_with_shirt, cx, cy = track_shirt(rgb)
+                rgb = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
 
-            sol = np.linalg.inv(intrinsic_mat) @ np.array([cx, cy, 1])
-            z = depth[cy * depth.shape[0] // rgb.shape[0], cx * depth.shape[1] // rgb.shape[1]]
-            x = (sol[0] * z) / sol[2]
-            y = -(sol[1] * z) / sol[2]
+                rgb_with_shirt, cx, cy = track_shirt(rgb)
 
-            print(f"X: {x}, Y: {y}, Z: {z}")
+                sol = np.linalg.inv(intrinsic_mat) @ np.array([cx, cy, 1])
+                z = depth[cy * depth.shape[0] // rgb.shape[0], cx * depth.shape[1] // rgb.shape[1]]
+                x = (sol[0] * z) / sol[2]
+                y = -(sol[1] * z) / sol[2]
 
-            # Show the RGBD Stream
-            cv2.imshow('RGB', rgb_with_shirt)
-            cv2.imshow('Depth', depth)
-            cv2.waitKey(1)
+                print(f"X: {x}, Y: {y}, Z: {z}")
 
-            self.event.clear()
+                x_path.append(x)
+                y_path.append(y)
+                z_path.append(z)
+                # Data for a three-dimensional line
+
+                # Show the RGBD Stream
+                cv2.imshow('RGB', rgb_with_shirt)
+                cv2.imshow('Depth', depth)
+
+                cv2.waitKey(1)
+                plt.draw()
+
+                # plt.plot(x_path, z_path, 'gray')
+                # plt.show()
+                M = 50
+                N = 10
+                x_moving_average = moving_average(x_path, N)
+                plt.clf()
+                plt.plot(x_moving_average, z_path[N - 1:], 'gray')
+                plt.xlim([-1, 1])
+                plt.ylim([0, 3])
+                plt.show()
+                x_path = x_path[-M:]
+                y_path = y_path[-M:]
+                z_path = z_path[-M:]
+
+                self.event.clear()
+        except KeyboardInterrupt:
+            # ax = plt.axes(projection='3d')
+            # ax.plot3D(x_path, y_path, z_path, 'gray')
+            # plt.plot(x_path, z_path, 'gray')
+            # plt.show()
+            # N = 30
+            # x_moving_average = moving_average(x_path, N)
+            # plt.plot(x_moving_average, z_path[N - 1:], 'gray')
+            # plt.show()
+            pass
 
 
 if __name__ == '__main__':
