@@ -4,7 +4,7 @@ import cv2
 import socket
 import numpy as np
 
-cap = cv2.VideoCapture(1)
+cap = cv2.VideoCapture(2)
 cap.set(3, 1280)
 cap.set(4, 720)
 
@@ -26,47 +26,10 @@ HALF_FOV = FOV / 2
 # Capital letters for world coordinates
 # Lowercase letters for camera coordinates
 
-mode = 1
-
 Diameter = 8.7e-2 # cm -> m
 
-while (mode == 0):
-    success, img = cap.read()
-    imgColor, mask = myColorFinder.update(img, hsvVals)
-    imgContour, contours = cvzone.findContours(img, mask)
-
-    width = img.shape[1]
-    height = img.shape[0]
-
-    if contours:
-        ellipse = cv2.fitEllipse(contours[0]['cnt'])
-        imgContour = cv2.ellipse(imgContour, ellipse, (0, 255, 0), 2)
-        circle = cv2.minEnclosingCircle(contours[0]['cnt'])
-        imgContour = cv2.circle(imgContour, np.int0(circle[0]), np.int0(circle[1]), (0, 255, 0), 2)
-        x, y = circle[0]
-        diameter = 2 * circle[1]
-        scalingFactor = Diameter / diameter
-        Height = scalingFactor * height
-        Width = scalingFactor * width
-        X = scalingFactor * (width / 2 - x)
-        Y = scalingFactor * (height / 2 - y)
-        Z = -Height / 2 / np.tan(HALF_FOV)
-        data = X, Y, Z
-        # data = contours[0]['center'][0], \
-        #        h - contours[0]['center'][1], \
-        #        int(contours[0]['area'])
-        print(data)
-        sock.sendto(str.encode(str(data)), serverAddressPort)
-
-    imgStack = cvzone.stackImages([img, imgColor, mask, imgContour], 2, 0.5)
-    cv2.imshow("Image", imgStack)
-    # imgContour = cv2.resize(imgContour, (0, 0), None, 0.5, 0.5)
-    # cv2.imshow("ImageContour", imgContour)
-    cv2.waitKey(1)
-
-while (mode == 1):
-    success, img = cap.read()
-    img = cv2.cvtColor(img,cv2.COLOR_BGR2RGB)
+def track_shirt(img):
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
     low = np.array([0, 80, 20])
     high = np.array([50, 255, 120])
@@ -77,6 +40,7 @@ while (mode == 1):
     blank = np.zeros(mask.shape[:2], dtype='uint8')
     # cv2.drawContours(blank, contours, -1, (255, 0, 0), 1)
 
+    cx, cy = 0, 0
     if len(contours) != 0:
         # cv2.drawContours(img, contours, -1, 255, 3)
         c = max(contours, key = cv2.contourArea)
@@ -88,9 +52,16 @@ while (mode == 1):
         cv2.putText(img, "center", (cx - 100, cy - 50), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 0, 0), 5)
         # print("x: ", cx)
         # print("y: ", cy)
-
-    result = cv2.bitwise_and(img, img, mask=mask)
+    
     img = cv2.cvtColor(img,cv2.COLOR_RGB2BGR)
+    return img, cx, cy
 
-    cv2.imshow("Mask", img)
-    cv2.waitKey(1)
+if __name__ == '__main__':
+    while True:
+        success, img = cap.read()
+        if not success:
+            break
+        img = track_shirt(img)[0]
+        cv2.imshow("Mask", img)
+        cv2.waitKey(1)
+

@@ -2,6 +2,7 @@ import numpy as np
 from record3d import Record3DStream
 import cv2
 from threading import Event
+from tracking import track_shirt
 
 
 class DemoApp:
@@ -52,7 +53,7 @@ class DemoApp:
             intrinsic_mat = self.get_intrinsic_mat_from_coeffs(self.session.get_intrinsic_mat())
             camera_pose = self.session.get_camera_pose()  # Quaternion + world position (accessible via camera_pose.[qx|qy|qz|qw|tx|ty|tz])
 
-            print(intrinsic_mat)
+            # print(intrinsic_mat)
 
             # You can now e.g. create point cloud by projecting the depth map using the intrinsic matrix.
 
@@ -63,8 +64,17 @@ class DemoApp:
 
             rgb = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
 
+            rgb_with_shirt, cx, cy = track_shirt(rgb)
+
+            sol = np.linalg.inv(intrinsic_mat) @ np.array([cx, cy, 1])
+            z = depth[cy * depth.shape[0] // rgb.shape[0], cx * depth.shape[1] // rgb.shape[1]]
+            x = (sol[0] * z) / sol[2]
+            y = -(sol[1] * z) / sol[2]
+
+            print(f"X: {x}, Y: {y}, Z: {z}")
+
             # Show the RGBD Stream
-            cv2.imshow('RGB', rgb)
+            cv2.imshow('RGB', rgb_with_shirt)
             cv2.imshow('Depth', depth)
             cv2.waitKey(1)
 
