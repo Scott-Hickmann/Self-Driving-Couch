@@ -13,33 +13,24 @@ import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 
-image_path = "./content/road_lane.jpg"
+image_path = "./content/road_lane_1.jpg"
 image1 = cv2.imread(image_path)
 
 window_name = 'image'
 
 cv2.imshow(window_name, image1)
 
-def grey(image):
-  #convert to grayscale
-    image = np.asarray(image)
-    return cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-
-  #Apply Gaussian Blur --> Reduce noise and smoothen image
-def gauss(image):
-    return cv2.GaussianBlur(image, (5, 5), 0)
-
-  #outline the strongest gradients in the image --> this is where lines in the image are
-def canny(image):
-    edges = cv2.Canny(image,50,150)
-    return edges
-
 def region(image):
     height, width = image.shape
     #isolate the gradients that correspond to the lane lines
     triangle = np.array([
-                       [(100, height), (475, 325), (width, height)]
-                       ])
+        [
+            (int(width * 0), int(0.95 * height)),
+            (int(width * 0.5), int(height * 0.2)),
+            (int(width), int(0.95 * height))
+        ]
+    ])
+    print(triangle)
     #create a black image with the same dimensions as original image
     mask = np.zeros_like(image)
     #create a mask (triangle that isolates the region of interest in our image)
@@ -98,9 +89,13 @@ def make_points(image, average):
 '''##### DETECTING lane lines in image ######'''
 
 copy = np.copy(image1)
-edges = cv2.Canny(copy,50,150)
+blur = cv2.GaussianBlur(copy, (3, 3), 0)
+edges = cv2.Canny(blur, 50, 150)
 isolated = region(edges)
+cv2.imshow(window_name, blur)
+cv2.waitKey(0)
 cv2.imshow(window_name, edges)
+cv2.waitKey(0)
 cv2.imshow(window_name, isolated)
 cv2.waitKey(0)
 

@@ -14,6 +14,12 @@ Activate the environment:
 conda activate couch
 ```
 
+Set up libomp:
+
+```bash
+brew install libomp
+```
+
 ## Development
 
 After each time you install or remove a dependency, make sure to run:
