@@ -22,6 +22,12 @@ After each time you install or remove a dependency, make sure to run:
 conda env export > environment.yml
 ```
 
+To install packages added by others, make sure to run:
+
+```bash
+conda env update --file environment.yml --prune
+```
+
 ## Usage
 
 ```bash
