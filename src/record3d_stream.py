@@ -4,6 +4,15 @@ import cv2
 from threading import Event
 from tracking import track_shirt
 import matplotlib.pyplot as plt
+import time
+import serial
+from threading import Thread
+
+left_speed = 0
+right_speed = 0
+
+M = 20
+N = 10
 
 def moving_average(a, n=10) :
     ret = np.cumsum(a, dtype=float)
@@ -49,11 +58,14 @@ class DemoApp:
                          [        0,         0,         1]])
 
     def start_processing_stream(self):
+        global left_speed, right_speed
+
         x_path = []
         y_path = []
         z_path = []
+        theta_path = []
 
-        plt.ion()
+        # plt.ion()
         try:
             while True:
                 self.event.wait()  # Wait for new frame to arrive
@@ -75,18 +87,45 @@ class DemoApp:
 
                 rgb = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
 
-                rgb_with_shirt, cx, cy = track_shirt(rgb)
+                rgb_with_shirt, cx, cy, w, h = track_shirt(rgb)
 
                 sol = np.linalg.inv(intrinsic_mat) @ np.array([cx, cy, 1])
                 z = depth[cy * depth.shape[0] // rgb.shape[0], cx * depth.shape[1] // rgb.shape[1]]
                 x = (sol[0] * z) / sol[2]
                 y = -(sol[1] * z) / sol[2]
 
-                print(f"X: {x}, Y: {y}, Z: {z}")
+                theta = np.tan(y / z)
+                # if abs(x) < 0.2:
+                #     x = 0
+                dtheta = (theta - np.average(theta_path)) / M
+                if np.isnan(dtheta):
+                    dtheta = 0
+
+                dz = (z - np.average(z_path)) / M
+                if np.isnan(dz):
+                    dz = 0
+
+                forward_speed = min(14 + max(4 * (z - 2.5) + 2000 * dz, 0), (np.pi / 2 - abs(theta)) * 12)
+                right_turn_speed = (1 + 0.2 * forward_speed) * max(6 * -theta + 100 * -dtheta, 0)
+                left_turn_speed = (1 + 0.2 * forward_speed) * max(6 * theta + 100 * dtheta, 0)
+                new_left_speed = forward_speed + left_turn_speed
+                new_right_speed = forward_speed + right_turn_speed
+                print(f"Forward: {forward_speed}, Left: {left_turn_speed}, Right: {right_turn_speed}")
+                if w * h < 2000:
+                    new_left_speed = 0
+                    new_right_speed = 0
+                if z < 0.5:
+                    new_left_speed = 0
+                    new_right_speed = 0
+                left_speed = int(min(max(new_left_speed, 0), 40))
+                right_speed = int(min(max(new_right_speed, 0), 40))
+                # print(f"Left: {left_speed}, Right: {right_speed}, X: {x}, Y: {y}, Z: {z}, theta: {theta}, w: {w}, h: {h}")
+                # print(f"{x_path}")
 
                 x_path.append(x)
                 y_path.append(y)
                 z_path.append(z)
+                theta_path.append(theta)
                 # Data for a three-dimensional line
 
                 # Show the RGBD Stream
@@ -94,21 +133,20 @@ class DemoApp:
                 cv2.imshow('Depth', depth)
 
                 cv2.waitKey(1)
-                plt.draw()
+                # plt.draw()
 
                 # plt.plot(x_path, z_path, 'gray')
                 # plt.show()
-                M = 50
-                N = 10
                 x_moving_average = moving_average(x_path, N)
-                plt.clf()
-                plt.plot(x_moving_average, z_path[N - 1:], 'gray')
-                plt.xlim([-1, 1])
-                plt.ylim([0, 3])
-                plt.show()
+                # plt.clf()
+                # plt.plot(x_moving_average, z_path[N - 1:], 'gray')
+                # plt.xlim([-1, 1])
+                # plt.ylim([0, 3])
+                # plt.show()
                 x_path = x_path[-M:]
                 y_path = y_path[-M:]
                 z_path = z_path[-M:]
+                theta_path = theta_path[-M:]
 
                 self.event.clear()
         except KeyboardInterrupt:
@@ -120,10 +158,46 @@ class DemoApp:
             # x_moving_average = moving_average(x_path, N)
             # plt.plot(x_moving_average, z_path[N - 1:], 'gray')
             # plt.show()
+            left_speed = 0
+            right_speed = 0
             pass
 
+arduino = serial.Serial(port='/dev/tty.usbserial-DJ00S8X2', baudrate=115200, timeout=.1)
+
+def write_read(x):
+    arduino.write(bytes(x, 'utf-8'))
+    time.sleep(0.05)
+    data = arduino.readline()
+    return data
+
+actual_left_speed = 0
+actual_right_speed = 0
+def update_arduino():
+    global left_speed, right_speed, actual_left_speed, actual_right_speed
+    while True:
+        print(f"Left: {actual_left_speed} Right: {actual_right_speed}")
+        if left_speed > actual_left_speed:
+            actual_left_speed += 1
+        elif left_speed < actual_left_speed:
+            actual_left_speed -= 1
+        if right_speed > actual_right_speed:
+            actual_right_speed += 1
+        elif right_speed < actual_right_speed:
+            actual_right_speed -= 1
+        if actual_left_speed < 15 and left_speed >= 15:
+            actual_left_speed = 15
+        if actual_right_speed < 15 and right_speed >= 15:
+            actual_right_speed = 15
+        if left_speed < 15:
+            actual_left_speed = 0
+        if right_speed < 15:
+            actual_right_speed = 0
+        value = write_read(f"{actual_left_speed} {actual_right_speed}")
+        print(value.strip())
 
 if __name__ == '__main__':
     app = DemoApp()
     app.connect_to_device(dev_idx=0)
+    t = Thread(target=update_arduino)
+    t.start()
     app.start_processing_stream()

@@ -4,13 +4,6 @@ import cv2
 import socket
 import numpy as np
 
-cap = cv2.VideoCapture(2)
-cap.set(3, 1280)
-cap.set(4, 720)
-
-success, img = cap.read()
-h, w, _ = img.shape
-
 myColorFinder = ColorFinder(False)
 # hsvVals = {'hmin': 33, 'smin': 72, 'vmin': 126, 'hmax': 58, 'smax': 255, 'vmax': 255} #iPad circle
 # hsvVals = {'hmin': 15, 'smin': 160, 'vmin': 0, 'hmax': 50, 'smax': 255, 'vmax': 255} Tennis ball
@@ -40,7 +33,7 @@ def track_shirt(img):
     blank = np.zeros(mask.shape[:2], dtype='uint8')
     # cv2.drawContours(blank, contours, -1, (255, 0, 0), 1)
 
-    cx, cy = 0, 0
+    cx, cy, w, h = 0, 0, 0, 0
     if len(contours) != 0:
         # cv2.drawContours(img, contours, -1, 255, 3)
         c = max(contours, key = cv2.contourArea)
@@ -54,9 +47,16 @@ def track_shirt(img):
         # print("y: ", cy)
     
     img = cv2.cvtColor(img,cv2.COLOR_RGB2BGR)
-    return img, cx, cy
+    return img, cx, cy, w, h
 
 if __name__ == '__main__':
+    cap = cv2.VideoCapture(0)
+    cap.set(3, 1280)
+    cap.set(4, 720)
+
+    success, img = cap.read()
+    h, w, _ = img.shape
+
     while True:
         success, img = cap.read()
         if not success:
