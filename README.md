@@ -1,5 +1,7 @@
 # Self-Driving-Couch
 
+## Note: The repo has been moved to https://github.com/jclin22009/motorized_couch.
+
 ## Installation
 
 Create a new conda environment and install the dependencies:
